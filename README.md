@@ -1,2 +1,2 @@
-# import-tags
-Import Tags from AWS into Alert Logic UI
+# itools
+scripts for using the alert logic API and AWS API
