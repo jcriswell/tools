@@ -64,7 +64,7 @@ for res in reservations:
 HEADERS = {'content-type': 'application/json'}
 PARAMS = {'search': 'i-'}
 URL = 'https://publicapi.alertlogic.net/api/tm/v1//protectedhosts'
-R = requests.get(URL, params=PARAMS, headers=HEADERS, auth=(''+API_KEY+'', ''))
+R = requests.get(URL, params=PARAMS, headers=HEADERS, auth=(API_KEY, ''))
 output = R.json()
 
 #proccess AWS instances looking for matches in Alert Logic (by instance ID)
