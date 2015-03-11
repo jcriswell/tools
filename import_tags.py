@@ -44,7 +44,7 @@ def update_source_name(id, tags):
 
     HEADERS = {'content-type': 'application/json'}
     URL = 'https://publicapi.alertlogic.net/api/tm/v1//protectedhosts/' + str(id)
-    R = requests.post(URL, headers=HEADERS, auth=(''+API_KEY+'', ''),data = TAG_UPDATE)
+    R = requests.post(URL, headers=HEADERS, auth=(API_KEY, ''),data = TAG_UPDATE)
 
     return R.status_code
 
