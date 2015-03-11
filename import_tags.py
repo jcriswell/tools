@@ -5,10 +5,14 @@ API_KEY = 'REPLACE_WITH_YOUR_ALERT_LOGIC_API_KEY'
 AWS_ACCESS_KEY = 'REPLACE_WITH_AWS_ACCESS'
 AWS_SECRET_KEY ='REPLACE_WITH_AWS_SECRET'
 
-API_KEYLIST_OF_AWS_INSTANCE_IDS = []
-LIST_OF_INSTANCE_TAGS = []
-NUMBER_OF_UPDATES = 0
-NUMBER_OF_FAILED_UPDATES = 0
+#request API call static Params
+HEADERS = {'content-type': 'application/json'}
+ALERT_LOGIC_API_URL = 'https://publicapi.alertlogic.net/api/tm/v1//protectedhosts/'
+
+list_of_aws_instance_ids = []
+list_of_instance_tags = []
+number_of_updates = 0
+number_of_failed_updates = 0
 
 #Alert Logic source tag is a single value, while AWS has K:V based tags
 #change to True if you want to capture both Key and Value, false is just value
@@ -36,15 +40,15 @@ def update_source_name(id, tags):
             newTag = newTag + '"}'
 
     if newTag == "":
-        TAG_UPDATE = json.dumps({"protectedhost": {"name": name}})
+        tag_update = json.dumps({"protectedhost": {"name": name}})
     else:
         jsonNewTag = '{"protectedhost":{"name":"'+str(name)+'","tags": ['+str(newTag)+']}}'
-        TAG_UPDATE = json.loads(jsonNewTag)
-        TAG_UPDATE = json.dumps(TAG_UPDATE)
+        tag_update = json.loads(jsonNewTag)
+        tag_update = json.dumps(tag_update)
 
-    HEADERS = {'content-type': 'application/json'}
-    URL = 'https://publicapi.alertlogic.net/api/tm/v1//protectedhosts/' + str(id)
-    R = requests.post(URL, headers=HEADERS, auth=(API_KEY, ''),data = TAG_UPDATE)
+
+
+    R = requests.post(ALERT_LOGIC_API_URL + str(id), headers=HEADERS, auth=(API_KEY,''),data = tag_update)
 
     return R.status_code
 
@@ -57,34 +61,32 @@ reservations = conn.get_all_instances()
 for res in reservations:
     for inst in res.instances:
         if 'Name' in inst.tags:
-            API_KEYLIST_OF_AWS_INSTANCE_IDS.append(inst.id)
-            LIST_OF_INSTANCE_TAGS.append(inst.tags)
+            list_of_aws_instance_ids.append(inst.id)
+            list_of_instance_tags.append(inst.tags)
 
 #call Alert Logic sources API and get sources detail
-HEADERS = {'content-type': 'application/json'}
-PARAMS = {'search': 'i-'}
-URL = 'https://publicapi.alertlogic.net/api/tm/v1//protectedhosts'
-R = requests.get(URL, params=PARAMS, headers=HEADERS, auth=(API_KEY, ''))
+params = {'search': 'i-'}
+R = requests.get(ALERT_LOGIC_API_URL, params=params, headers=HEADERS, auth=(API_KEY, ''))
 output = R.json()
 
 #proccess AWS instances looking for matches in Alert Logic (by instance ID)
 listIndex = 0
-for listIndex in range(len(API_KEYLIST_OF_AWS_INSTANCE_IDS)):
+for listIndex in range(len(list_of_aws_instance_ids)):
     if output["protectedhosts"]:
         index = 0
         for index in range(len(output["protectedhosts"])):
             if 'ec2_instance_id' in output["protectedhosts"][index]["protectedhost"]["metadata"]:
-                if API_KEYLIST_OF_AWS_INSTANCE_IDS[listIndex] == output["protectedhosts"][index]["protectedhost"]["metadata"]["ec2_instance_id"]:
+                if list_of_aws_instance_ids[listIndex] == output["protectedhosts"][index]["protectedhost"]["metadata"]["ec2_instance_id"]:
                     tempID = output["protectedhosts"][index]["protectedhost"]["id"]
                     # call update tags and store httpcode
-                    httpCode = update_source_name(tempID,LIST_OF_INSTANCE_TAGS[listIndex])
+                    httpCode = update_source_name(tempID,list_of_instance_tags[listIndex])
 
                     if httpCode == 200:
-                        NUMBER_OF_UPDATES = NUMBER_OF_UPDATES + 1
+                        number_of_updates = number_of_updates + 1
                     if httpCode == 400 or httpCode == 500:
-                        NUMBER_OF_FAILED_UPDATES = NUMBER_OF_FAILED_UPDATES + 1
+                        number_of_failed_updates = number_of_failed_updates + 1
 
 
 
-print ("Successfully updated %s record(s)" % NUMBER_OF_UPDATES)
-print ("Unsuccessfully updated %s record(s)" % NUMBER_OF_FAILED_UPDATES)
+print ("Successfully updated %s record(s)" % number_of_updates)
+print ("Unsuccessfully updated %s record(s)" % number_of_failed_updates)
