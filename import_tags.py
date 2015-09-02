@@ -1,5 +1,6 @@
 import boto.ec2, json, requests
 
+
 #replace with Alert Logic API Key
 API_KEY = 'REPLACE_WITH_YOUR_ALERT_LOGIC_API_KEY'
 AWS_ACCESS_KEY = 'REPLACE_WITH_AWS_ACCESS'
@@ -58,10 +59,15 @@ def get_log_source(instance_id):
     R = requests.get(ALERT_LOGIC_LOG_API_URL, params=params, headers=HEADERS, auth=(API_KEY, ''))
     output = R.json()
     if output['sources']:
-        return output['sources'][0]['syslog']['id']
+        if 'syslog' in output['sources'][0]:
+            print ("instance_id=%s source %s" % (instance_id, output['sources'][0]['syslog']['id']))
+            return output['sources'][0]['syslog']['id'], False
+        elif 'eventlog' in output['sources'][0]:
+            print ("instance_id=%s source %s" % (instance_id, output['sources'][0]['eventlog']['id']))
+            return output['sources'][0]['eventlog']['id'], True
     return None
 
-def update_log_source_name(id, tags):
+def update_log_source_name(id, tags, isWin):
     name = tags['Name']
     newTag = ""
     for tag in tags:
@@ -74,16 +80,24 @@ def update_log_source_name(id, tags):
             else:
                 newTag = newTag + '"' + tags[tag]
             newTag = newTag + '"}'
-
-    if newTag == "":
-        tag_update = json.dumps({"syslog": {"name": name, "method" : "agent"}})
+    if not isWin: 
+        if newTag == "":
+            tag_update = json.dumps({"syslog": {"name": name, "method" : "agent"}})
+        else:
+            jsonNewTag = '{"syslog":{"name":"'+str(name)+'","method": "agent", "tags": ['+str(newTag)+']}}'
+            tag_update = json.loads(jsonNewTag)
+            tag_update = json.dumps(tag_update)
+        R = requests.post(ALERT_LOGIC_LOG_API_URL + '/syslog/' + str(id), headers=HEADERS, auth=(API_KEY,''),data = tag_update)
+        return R.status_code
     else:
-        jsonNewTag = '{"syslog":{"name":"'+str(name)+'","method": "agent", "tags": ['+str(newTag)+']}}'
-        tag_update = json.loads(jsonNewTag)
-        tag_update = json.dumps(tag_update)
-    R = requests.post(ALERT_LOGIC_LOG_API_URL + '/syslog/' + str(id), headers=HEADERS, auth=(API_KEY,''),data = tag_update)
-    return R.status_code
-
+        if newTag == "":
+            tag_update = json.dumps({"eventlog": {"name": name}})
+        else:
+            jsonNewTag = '{"eventlog":{"name":"'+str(name)+'", "tags": ['+str(newTag)+']}}'
+            tag_update = json.loads(jsonNewTag)
+            tag_update = json.dumps(tag_update)
+        R = requests.post(ALERT_LOGIC_LOG_API_URL + '/eventlog/' + str(id), headers=HEADERS, auth=(API_KEY,''),data = tag_update)
+        return R.status_code
 #establish the AWS CLI connection and create lists of tags and instance IDs
 conn = boto.ec2.connect_to_region('us-east-1',
    aws_access_key_id=AWS_ACCESS_KEY,
@@ -110,13 +124,13 @@ for listIndex in range(len(list_of_aws_instance_ids)):
             if 'ec2_instance_id' in output["protectedhosts"][index]["protectedhost"]["metadata"]:
                 if list_of_aws_instance_ids[listIndex] == output["protectedhosts"][index]["protectedhost"]["metadata"]["ec2_instance_id"]:
                     tempID = output["protectedhosts"][index]["protectedhost"]["id"]
+                     #get corresponding log sources ID for the instance
+                    logID, isWin = get_log_source(output["protectedhosts"][index]["protectedhost"]["metadata"]["ec2_instance_id"])
                     # call update tags and store httpcode
                     httpCode = update_source_name(tempID,list_of_instance_tags[listIndex])
-                    #get corresponding log sources ID for the instance
-                    logID = get_log_source(output["protectedhosts"][index]["protectedhost"]["metadata"]["ec2_instance_id"])
                     # call update to sources DB for LM
                     if logID is not None:
-                        httpCodeLog = update_log_source_name(logID, list_of_instance_tags[listIndex])
+                        httpCodeLog = update_log_source_name(logID, list_of_instance_tags[listIndex], isWin)
                     if httpCode == 200:
                         number_of_updates = number_of_updates + 1
                     if httpCode == 400 or httpCode == 500:
@@ -128,6 +142,9 @@ for listIndex in range(len(list_of_aws_instance_ids)):
                     
                     
                    
+
+
+
 print ("Successfully updated %s record(s)" % number_of_updates)
 print ("Unsuccessfully updated %s record(s)" % number_of_failed_updates)
 print ("Successfully updated %s log sources(s)" % number_of_updates)
